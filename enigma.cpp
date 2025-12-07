@@ -11,13 +11,94 @@ using namespace std;
 // ================================
 class EnigmaMachine {
 private:
-    vector<int> pin;        // Menyimpan 4 angka PIN (Rotor setting)
-    string password;        // Menyimpan password (Plugboard/Key setting)
+    vector<int> pin;        // Menyimpan 4 angka PIN
+    string password;        // Menyimpan password
     
     // Rentang ASCII yang bisa dicetak (Space ' ' s/d Tilde '~')
     const int ASCII_START = 32;
     const int ASCII_END = 126;
     const int RANGE = 95;
+
+    // --- LOGIKA "GENERATOR ACAK" (CORE ALGORITHM) ---
+    
+    // Membuat "Seed" (Benih) Unik dari kombinasi PIN dan Password
+    unsigned long long generateInitialSeed() {
+        unsigned long long seed = 0;
+
+        // Campurkan PIN ke dalam seed
+        // Kalikan dengan (i+1) agar urutan PIN berpengaruh (1234 != 4321)
+        for (size_t i = 0; i < pin.size(); ++i) {
+            seed = seed * 10 + (pin[i] * (i + 1));
+        }
+
+        // Campurkan Password ke dalam seed
+        // Menggunakan operasi bitwise sederhana untuk mengacak bit
+        if (!password.empty()) {
+            for (size_t i = 0; i < password.length(); ++i) {
+                unsigned int charVal = (unsigned int)password[i];
+                // Kalikan dengan angka prima sembarang (1337) untuk menyebar nilai
+                seed += charVal * (i + 1337);
+                // Geser bit dan XOR untuk efek pengacakan (mixing)
+                seed ^= (seed << 5);
+            }
+        }
+
+        // Pastikan seed tidak 0 agar perkalian matematika tidak macet
+        if (seed == 0) seed = 123456789;
+
+        return seed;
+    }
+
+    // Fungsi inti pemroses teks (Stream Cipher Logic)
+    string runCipherOperation(string input, bool isEncrypt) {
+        if (input.empty()) return "";
+
+        // Bangkitkan Seed awal dari konfigurasi saat ini
+        unsigned long long currentSeed = generateInitialSeed();
+
+        string result = "";
+        
+        // Proses setiap karakter
+        for (char c : input) {
+            int charCode = (int)c;
+
+            // Hanya proses karakter ASCII yang bisa dicetak (32-126)
+            if (charCode >= ASCII_START && charCode <= ASCII_END) {
+
+                // --- ALGORITMA PENGACAK (Linear Congruential Generator / LCG) ---
+                // Rumus klasik: next = (prev * A + B)
+                // Konstanta standar POSIX/GCC untuk LCG
+                currentSeed = (currentSeed * 1103515245 + 12345);
+
+                // Ambil bit bagian tengah/atas sebagai angka acak, lalu modulo RANGE (95)
+                // (currentSeed / 65536) membuang bit rendah yang polanya kurang acak
+                int randomShift = (currentSeed / 65536) % RANGE;
+
+                // --- PROSES GESER ---
+                int originalVal = charCode - ASCII_START;
+                int processedVal;
+
+                if (isEncrypt) {
+                    // Enkripsi: Geser MAJU tambah angka acak
+                    processedVal = (originalVal + randomShift) % RANGE;
+                } else {
+                    // Dekripsi: Geser MUNDUR kurangi angka acak
+                    processedVal = (originalVal - randomShift) % RANGE;
+
+                    // Koreksi hasil negatif (karena sifat modulo C++ bisa negatif)
+                    if (processedVal < 0) {
+                        processedVal += RANGE;
+                    }
+                }
+
+                result += (char)(processedVal + ASCII_START);
+            } else {
+                // Jika karakter spesial (emoji, enter, tab), biarkan apa adanya
+                result += c;
+            }
+        }
+        return result;
+    }
 
 public:
     EnigmaMachine() {
@@ -33,58 +114,21 @@ public:
         password = pwd;
     }
 
-    // LOGIKA PERGESERAN DINAMIS
-    int calculateShift(int msgIndex) {
-        if (password.empty()) return 0;
-
-        int passVal = (int)password[msgIndex % password.length()];
-        int pinVal = pin[msgIndex % 4];
-        
-        // (Password + PIN + Posisi) -> Dinamis
-        return (passVal + pinVal + msgIndex); 
-    }
-
-    // ENKRIPSI
+    // Wrapper untuk Enkripsi
     string encrypt(string message) {
-        string result = "";
-        for (int i = 0; i < message.length(); i++) {
-            char c = message[i];
-            if (c >= ASCII_START && c <= ASCII_END) {
-                int originalVal = c - ASCII_START;
-                int shift = calculateShift(i);
-                int encryptedVal = (originalVal + shift) % RANGE;
-                if (encryptedVal < 0) encryptedVal += RANGE;
-                result += (char)(encryptedVal + ASCII_START);
-            } else {
-                result += c;
-            }
-        }
-        return result;
+        return runCipherOperation(message, true);
     }
 
-    // DEKRIPSI
+    // Wrapper untuk Dekripsi
     string decrypt(string cipherText) {
-        string result = "";
-        for (int i = 0; i < cipherText.length(); i++) {
-            char c = cipherText[i];
-            if (c >= ASCII_START && c <= ASCII_END) {
-                int cipherVal = c - ASCII_START;
-                int shift = calculateShift(i);
-                int decryptedVal = (cipherVal - shift) % RANGE;
-                if (decryptedVal < 0) decryptedVal += RANGE;
-                result += (char)(decryptedVal + ASCII_START);
-            } else {
-                result += c;
-            }
-        }
-        return result;
+        return runCipherOperation(cipherText, false);
     }
     
     void showConfig() {
-        cout << "\n=== Status Enigmorph ===" << endl;
+        cout << "\n=== Status Enigmorph (Enhanced Engine) ===" << endl;
         cout << "PIN Rotor : " << pin[0] << "-" << pin[1] << "-" << pin[2] << "-" << pin[3] << endl;
         cout << "Password  : " << password << endl; 
-        cout << "========================\n" << endl;
+        cout << "==========================================\n" << endl;
     }
 };
 
@@ -109,26 +153,20 @@ int main() {
     cout << "                |___/                     |_|            " << endl;
 
     // --- LOGIKA INPUT PIN ---
-    cout << "\n=== INISIALISASI SISTEM ===\n" << endl;
+    cout << "\n=== INISIALISASI SISTEM (VERSI UPDATED) ===\n" << endl;
     
     while (true) {
         cout << "Masukkan PIN (4 angka, cth: 1945 atau 1 9 4 5): ";
-        // Gunakan getline agar bisa membaca spasi ataupun tanpa spasi
         getline(cin, rawPinInput);
 
         cleanPin.clear();
-        // Loop setiap karakter input user
         for (char c : rawPinInput) {
-            // Jika karakter adalah angka, masukkan ke vector
             if (isdigit(c)) {
-                // Konversi char '5' menjadi int 5 dengan cara mengurangi char '0'
                 cleanPin.push_back(c - '0');
             }
         }
 
-        // Cek apakah user memasukkan tepat 4 angka
         if (cleanPin.size() == 4) {
-            // Jika benar, set ke mesin dan keluar dari loop
             enigmorph.setPin(cleanPin[0], cleanPin[1], cleanPin[2], cleanPin[3]);
             break; 
         } else {
@@ -137,11 +175,7 @@ int main() {
     }
 
     cout << "Masukkan Password (teks): ";
-    // Menggunakan getline untuk password agar password bisa mengandung spasi
-    // Tapi di sini kita pakai cin >> pwd untuk satu kata, atau getline jika ingin kalimat.
-    // Gunakan getline agar lebih aman bercampur dengan buffer sebelumnya.
     getline(cin, pwd);
-    // Jika user langsung enter tanpa isi (kosong), minta ulang (opsional) atau biarkan.
     if(pwd.empty()) {
         cout << "Password kosong, menggunakan default." << endl;
         pwd = "default";
@@ -159,14 +193,13 @@ int main() {
         cout << "4. Keluar" << endl;
         cout << "\nPilihan Anda: ";
         
-        // Validasi input menu agar tidak crash jika input huruf
         if (!(cin >> choice)) {
             cout << "Input tidak valid!" << endl;
             cin.clear();
             cin.ignore(numeric_limits<streamsize>::max(), '\n');
             continue;
         }
-        cin.ignore(); // Membersihkan buffer enter setelah cin >> choice
+        cin.ignore(); // Membersihkan buffer
 
         switch (choice) {
         case 1:
@@ -191,7 +224,6 @@ int main() {
         case 3:
             cout << "\n[UBAH KONFIGURASI]" << endl;
             
-            // Logika Input PIN untuk ubah konfigurasi mesin
             while (true) {
                 cout << "Masukkan 4 angka PIN baru: ";
                 getline(cin, rawPinInput);
