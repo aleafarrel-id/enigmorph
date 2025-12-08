@@ -37,16 +37,18 @@ private:
     QVector<int> m_pin;
     QString m_password;
 
+    // Konstanta ASCII yang bisa dicetak (Space sampai Tilde)
     static const int ASCII_START = 32;
     static const int ASCII_END = 126;
     static const int RANGE = 95;
 
     // Helper functions
-    int calculateShift(int msgIndex) const;
     QVector<int> parsePin(const QString &pinStr) const;
-    QString processText(const QString &text, bool isEncrypt) const;
 
-    // Centralizes the common logic for both encrypt/decrypt
+    // Fungsi inti untuk menghasilkan Seed dari PIN + Password
+    unsigned long long generateInitialSeed() const;
+
+    // Fungsi utama pemroses teks
     QString runCipherOperation(const QString &input, bool isEncrypt);
 };
 

@@ -6,7 +6,7 @@ EnigmaMachine::EnigmaMachine(QObject *parent)
     , m_pin{0, 0, 0, 0}
     , m_password("default")
 {
-    qDebug() << "EnigmaMachine initialized";
+    qDebug() << "EnigmaMachine initialized (Enhanced PRNG Version)";
 }
 
 QString EnigmaMachine::pin() const
@@ -35,7 +35,6 @@ void EnigmaMachine::setPin(const QString &pinStr)
     if (newPin != m_pin) {
         m_pin = newPin;
         emit pinChanged();
-        qDebug() << "PIN updated:" << pin();
     }
 }
 
@@ -46,7 +45,6 @@ void EnigmaMachine::setPassword(const QString &pwd)
     if (newPassword != m_password) {
         m_password = newPassword;
         emit passwordChanged();
-        qDebug() << "Password updated (length:" << m_password.length() << ")";
     }
 }
 
@@ -61,39 +59,110 @@ void EnigmaMachine::reset()
 
 QString EnigmaMachine::encrypt(const QString &message)
 {
-    // Menggunakan fungsi helper
     return runCipherOperation(message, true);
 }
 
 QString EnigmaMachine::decrypt(const QString &cipherText)
 {
-    // Menggunakan fungsi helper
     return runCipherOperation(cipherText, false);
 }
 
-// Fungsi helper
+// ---------------------------------------------------------
+// LOGIKA "GENERATOR ACAK" (CORE ALGORITHM)
+// ---------------------------------------------------------
+
+// Membuat "Seed" (Benih) Unik dari kombinasi PIN dan Password
+unsigned long long EnigmaMachine::generateInitialSeed() const
+{
+    unsigned long long seed = 0;
+
+    // Campurkan PIN ke dalam seed
+    // Kalikan dengan (i+1) agar urutan PIN berpengaruh (1234 != 4321)
+    for (int i = 0; i < m_pin.size(); ++i) {
+        seed = seed * 10 + (m_pin[i] * (i + 1));
+    }
+
+    // Campurkan Password ke dalam seed
+    // Menggunakan operasi bitwise sederhana untuk mengacak bit
+    if (!m_password.isEmpty()) {
+        for (int i = 0; i < m_password.length(); ++i) {
+            unsigned int charVal = m_password[i].unicode();
+            // Kalikan dengan angka prima sembarang (1337) untuk menyebar nilai
+            seed += charVal * (i + 1337);
+            // Geser bit dan XOR untuk efek pengacakan (mixing)
+            seed ^= (seed << 5);
+        }
+    }
+
+    // Pastikan seed tidak 0 agar perkalian matematika nanti tidak macet
+    if (seed == 0) seed = 123456789;
+
+    return seed;
+}
+
+// Fungsi Eksekusi Enkripsi/Dekripsi dengan Stream Cipher
 QString EnigmaMachine::runCipherOperation(const QString &input, bool isEncrypt)
 {
-    QString mode = isEncrypt ? "encryption" : "decryption";
-
     if (input.isEmpty()) {
-        qWarning() << "Cannot perform" << mode << "on empty text";
+        qWarning() << "Cannot perform operation on empty text";
         return QString();
     }
 
     if (!isPinValid()) {
-        qWarning() << "Invalid PIN for" << mode;
+        qWarning() << "Invalid PIN";
         return QString();
     }
 
     emit processingStarted();
-    qDebug() << (isEncrypt ? "Encrypting" : "Decrypting") << "text of length:" << input.length();
 
-    QString result = processText(input, isEncrypt);
+    // Bangkitkan Seed awal
+    unsigned long long currentSeed = generateInitialSeed();
+
+    QString result;
+    result.reserve(input.length());
+
+    // Proses setiap karakter
+    for (int i = 0; i < input.length(); ++i) {
+        QChar currentChar = input[i];
+        int charCode = currentChar.unicode();
+
+        // Hanya proses karakter ASCII yang bisa dicetak (32-126)
+        if (charCode >= ASCII_START && charCode <= ASCII_END) {
+
+            // --- ALGORITMA PENGACAK (Linear Congruential Generator / LCG) ---
+            // Rumus klasik: next = (prev * A + B)
+            // Konstanta ini biasa digunakan di library C++ standar (GCC)
+            currentSeed = (currentSeed * 1103515245 + 12345);
+
+            // Ambil bit bagian atas sebagai angka acak, lalu modulo RANGE (95)
+            // agar hasilnya ada di rentang 0-94 (sesuai jumlah karakter ASCII)
+            int randomShift = (currentSeed / 65536) % RANGE;
+
+            // --- PROSES GESER ---
+            int originalVal = charCode - ASCII_START;
+            int processedVal;
+
+            if (isEncrypt) {
+                // Enkripsi: Geser MAJU tambah angka acak
+                processedVal = (originalVal + randomShift) % RANGE;
+            } else {
+                // Dekripsi: Geser MUNDUR kurangi angka acak
+                processedVal = (originalVal - randomShift) % RANGE;
+
+                // Koreksi hasil negatif (karena sifat modulo C++ bisa negatif)
+                if (processedVal < 0) {
+                    processedVal += RANGE;
+                }
+            }
+
+            result += QChar(processedVal + ASCII_START);
+        } else {
+            // Jika karakter spesial (emoji, enter, tab), biarkan apa adanya
+            result += currentChar;
+        }
+    }
 
     emit processingFinished();
-    qDebug() << mode << "completed";
-
     return result;
 }
 
@@ -112,51 +181,6 @@ QVector<int> EnigmaMachine::parsePin(const QString &pinStr) const
 
     while (result.size() < 4) {
         result.append(0);
-    }
-
-    return result;
-}
-
-int EnigmaMachine::calculateShift(int msgIndex) const
-{
-    if (m_password.isEmpty()) {
-        return 0;
-    }
-
-    int passVal = m_password.at(msgIndex % m_password.length()).unicode();
-    int pinVal = m_pin[msgIndex % 4];
-
-    return passVal + pinVal + msgIndex;
-}
-
-QString EnigmaMachine::processText(const QString &text, bool isEncrypt) const
-{
-    QString result;
-    result.reserve(text.length());
-
-    for (int i = 0; i < text.length(); ++i) {
-        QChar currentChar = text[i];
-        int charCode = currentChar.unicode();
-
-        if (charCode >= ASCII_START && charCode <= ASCII_END) {
-            int originalVal = charCode - ASCII_START;
-            int shift = calculateShift(i);
-
-            int processedVal;
-            if (isEncrypt) {
-                processedVal = (originalVal + shift) % RANGE;
-            } else {
-                processedVal = (originalVal - shift) % RANGE;
-            }
-
-            if (processedVal < 0) {
-                processedVal += RANGE;
-            }
-
-            result += QChar(processedVal + ASCII_START);
-        } else {
-            result += currentChar;
-        }
     }
 
     return result;

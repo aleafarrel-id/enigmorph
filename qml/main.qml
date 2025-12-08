@@ -274,7 +274,8 @@ ApplicationWindow {
                     model:ListModel {
                         ListElement { step: "1"; title: "Set PIN"; desc: "Masukkan 4 angka sebagai kunci utama." }
                         ListElement { step: "2"; title: "Keyword"; desc: "Masukkan kata sandi enkripsi." }
-                        ListElement { step: "3"; title: "Process"; desc: "Tulis pesan, lalu Encrypt atau Decrypt." }
+                        ListElement { step: "3"; title: "Process"; desc: "Tulis atau masukan pesan, lalu Encrypt atau Decrypt." }
+                        ListElement { step: "4"; title: "Result"; desc: "Hasil Enkripsi atau Dekripsi akan muncul di bagian kanan." }
                     }
                     delegate: RowLayout {
                         Layout.fillWidth: true
