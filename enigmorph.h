@@ -27,6 +27,13 @@ public:
     Q_INVOKABLE QString decrypt(const QString &cipherText);
     Q_INVOKABLE void reset();
 
+    // --- FITUR STEGANOGRAFI ---
+    // Menyisipkan pesan (ciphertext) ke dalam gambar
+    Q_INVOKABLE bool embedSecret(const QString &imagePath, const QString &outputPath, const QString &secretData);
+    
+    // Mengambil pesan rahasia dari gambar
+    Q_INVOKABLE QString extractSecret(const QString &imagePath);
+
 signals:
     void pinChanged();
     void passwordChanged();
@@ -37,19 +44,18 @@ private:
     QVector<int> m_pin;
     QString m_password;
 
-    // Konstanta ASCII yang bisa dicetak (Space sampai Tilde)
+    // Konstanta ASCII
     static const int ASCII_START = 32;
     static const int ASCII_END = 126;
     static const int RANGE = 95;
 
     // Helper functions
     QVector<int> parsePin(const QString &pinStr) const;
-
-    // Fungsi inti untuk menghasilkan Seed dari PIN + Password
     unsigned long long generateInitialSeed() const;
-
-    // Fungsi utama pemroses teks
     QString runCipherOperation(const QString &input, bool isEncrypt);
+    
+    // Helper untuk path file QML
+    QString cleanPath(const QString &path);
 };
 
 #endif // ENIGMORPH_H
